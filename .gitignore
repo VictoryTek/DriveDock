@@ -1,0 +1,62 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Flatpak build directories
+build-dir/
+.flatpak-builder/
+repo/
+.flatpak/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-*
+.project
+.classpath
+.settings/
+*.iml
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.a
+*.lib
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+\#*\#
+.\#*
+
+# Distribution and packaging
+*.deb
+*.rpm
+*.flatpak
+dist/
+build/

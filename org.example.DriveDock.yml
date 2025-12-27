@@ -1,0 +1,74 @@
+# Flatpak manifest for DriveDock
+# Build with: flatpak-builder --user --install build-dir org.example.DriveDock.yml
+
+app-id: org.example.DriveDock
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+
+command: drivedock
+
+finish-args:
+  # Wayland and X11 support for windowing
+  - --socket=wayland
+  - --socket=fallback-x11
+  
+  # GPU acceleration for smooth rendering
+  - --device=dri
+  
+  # Access to filesystem for drive management
+  # In production, this should be more restricted
+  - --filesystem=host
+  
+  # D-Bus access for system integration
+  - --socket=system-bus
+  - --socket=session-bus
+  
+  # Network access for discovering network shares
+  - --share=network
+  
+  # Allow talking to UDisks2 for disk operations
+  - --system-talk-name=org.freedesktop.UDisks2
+  
+  # Allow Polkit for privileged operations
+  - --system-talk-name=org.freedesktop.PolicyKit1
+  
+  # Avahi for network service discovery (SMB/NFS)
+  - --system-talk-name=org.freedesktop.Avahi
+
+modules:
+  # Main DriveDock application
+  - name: drivedock
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/drivedock/cargo
+        RUST_BACKTRACE: '1'
+    
+    build-commands:
+      # Build the Rust application
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline build --release --verbose
+      
+      # Install binary
+      - install -Dm755 target/release/drivedock -t /app/bin/
+      
+      # Install desktop file (to be created)
+      # - install -Dm644 data/org.example.DriveDock.desktop -t /app/share/applications/
+      
+      # Install icon (to be created)
+      # - install -Dm644 data/org.example.DriveDock.svg -t /app/share/icons/hicolor/scalable/apps/
+      
+      # Install appstream metadata (to be created)
+      # - install -Dm644 data/org.example.DriveDock.metainfo.xml -t /app/share/metainfo/
+    
+    sources:
+      # Use local source directory during development
+      - type: dir
+        path: .
+      
+      # Cargo dependencies (will be generated)
+      # - cargo-sources.json

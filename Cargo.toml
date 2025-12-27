@@ -1,0 +1,43 @@
+[package]
+name = "drivedock"
+version = "0.1.0"
+edition = "2021"
+authors = ["DriveDock Contributors"]
+description = "A modern Linux drive and network share manager with GTK4"
+license = "GPL-3.0"
+
+[dependencies]
+# GTK4 and libadwaita for modern GNOME UI
+gtk = { version = "0.9", package = "gtk4", features = ["v4_12"] }
+libadwaita = { version = "0.7", package = "libadwaita", features = ["v1_5"] }
+
+# GLib integration for GTK event loop and async support
+glib = "0.20"
+
+# Async runtime - using glib's MainContext for GTK integration
+tokio = { version = "1", features = ["rt", "macros", "process", "fs"], optional = true }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Serialization for configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+# Default features for standard build
+default = []
+
+# Enable tokio runtime alongside glib (for future advanced async needs)
+tokio-runtime = ["tokio"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
