@@ -4,7 +4,6 @@ mod network;
 
 use gtk::prelude::*;
 use libadwaita as adw;
-use adw::prelude::*;
 
 const APP_ID: &str = "org.example.DriveDock";
 

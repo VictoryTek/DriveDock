@@ -14,6 +14,12 @@ libadwaita = { version = "0.7", package = "libadwaita", features = ["v1_5"] }
 # GLib integration for GTK event loop and async support
 glib = "0.20"
 
+# Futures for async operations
+futures = "0.3"
+
+# System calls for filesystem operations
+libc = "0.2"
+
 # Async runtime - using glib's MainContext for GTK integration
 tokio = { version = "1", features = ["rt", "macros", "process", "fs"], optional = true }
 

@@ -60,3 +60,7 @@ Desktop.ini
 *.flatpak
 dist/
 build/
+
+# Flatpak cargo generator
+flatpak-cargo-generator.py
+cargo-sources.json

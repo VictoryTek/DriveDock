@@ -70,5 +70,5 @@ modules:
       - type: dir
         path: .
       
-      # Cargo dependencies (will be generated)
-      # - cargo-sources.json
+      # Cargo dependencies
+      - cargo-sources.json

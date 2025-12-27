@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::os::unix::ffi::OsStrExt;
 
 /// Represents a mounted drive or partition
 #[derive(Debug, Clone)]
@@ -27,16 +28,6 @@ pub struct MountedDrive {
 }
 
 impl MountedDrive {
-    /// Calculate used percentage
-    pub fn used_percentage(&self) -> Option<f32> {
-        match (self.used_space, self.total_size) {
-            (Some(used), Some(total)) if total > 0 => {
-                Some((used as f32 / total as f32) * 100.0)
-            }
-            _ => None,
-        }
-    }
-
     /// Format size for display (e.g., "512 GB", "1.5 TB")
     pub fn format_size(bytes: u64) -> String {
         const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
@@ -101,6 +92,9 @@ pub async fn list_mounted_drives() -> Result<Vec<MountedDrive>> {
         let mount_point = unescape_mount_point(mount_point);
         let mount_path = PathBuf::from(&mount_point);
 
+        // Get filesystem statistics
+        let (total_size, used_space) = get_filesystem_stats(&mount_path);
+
         // Check if safe to unmount
         let is_safe = is_safe_to_unmount(&mount_path).await;
 
@@ -108,8 +102,8 @@ pub async fn list_mounted_drives() -> Result<Vec<MountedDrive>> {
             device: device.to_string(),
             mount_point: mount_path,
             fs_type: fs_type.to_string(),
-            total_size: None,  // TODO: Implement statvfs
-            used_space: None,  // TODO: Implement statvfs
+            total_size,
+            used_space,
             is_safe_to_unmount: is_safe,
         });
     }
@@ -128,6 +122,34 @@ fn is_pseudo_filesystem(fs_type: &str) -> bool {
         "mqueue" | "hugetlbfs" | "autofs" | "configfs" |
         "fusectl" | "fuse.portal" | "efivarfs" | "overlay"
     )
+}
+
+/// Get filesystem statistics (total size, used space) using statvfs
+fn get_filesystem_stats(path: &PathBuf) -> (Option<u64>, Option<u64>) {
+    use std::mem;
+    
+    // Convert path to C string
+    let path_cstr = match std::ffi::CString::new(path.as_os_str().as_bytes()) {
+        Ok(s) => s,
+        Err(_) => return (None, None),
+    };
+    
+    // Call statvfs
+    unsafe {
+        let mut stat: libc::statvfs = mem::zeroed();
+        if libc::statvfs(path_cstr.as_ptr(), &mut stat) == 0 {
+            let block_size = stat.f_frsize as u64;
+            let total_blocks = stat.f_blocks as u64;
+            let free_blocks = stat.f_bfree as u64;
+            
+            let total_size = total_blocks * block_size;
+            let used_size = (total_blocks - free_blocks) * block_size;
+            
+            (Some(total_size), Some(used_size))
+        } else {
+            (None, None)
+        }
+    }
 }
 
 /// Check if device name represents real storage
@@ -217,19 +239,5 @@ mod tests {
         assert_eq!(MountedDrive::format_size(1536), "1.5 KB");
         assert_eq!(MountedDrive::format_size(1024 * 1024), "1.0 MB");
         assert_eq!(MountedDrive::format_size(1024 * 1024 * 1024), "1.0 GB");
-    }
-
-    #[test]
-    fn test_used_percentage() {
-        let drive = MountedDrive {
-            device: "sda1".to_string(),
-            mount_point: PathBuf::from("/mnt/test"),
-            fs_type: "ext4".to_string(),
-            total_size: Some(1000),
-            used_space: Some(500),
-            is_safe_to_unmount: true,
-        };
-
-        assert_eq!(drive.used_percentage(), Some(50.0));
     }
 }

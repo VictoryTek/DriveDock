@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Scaffolded for future implementation
+
 use std::path::Path;
 use thiserror::Error;
 use anyhow::Result;
@@ -76,18 +78,34 @@ pub async fn unmount_drive<P: AsRef<Path>>(mount_point: P) -> Result<(), Unmount
     // 1. Check if mount point is currently mounted (parse /proc/mounts)
     // 2. Check if any processes are using the mount (lsof or /proc inspection)
     // 3. Use UDisks2 D-Bus API for unmounting (preferred in Flatpak)
-    //    - Call org.freedesktop.UDisks2.Filesystem.Unmount
-    //    - Handle Polkit authorization dialog
-    // 4. Fallback to spawning `umount` command with pkexec
-    // 5. Handle timeout and retry logic
-    // 6. Verify unmount succeeded
-
-    tracing::debug!("Unmount operation not yet implemented");
+    // 4. Fall back to umount command with pkexec if needed
     
-    // Placeholder: Simulate not-yet-implemented
-    Err(UnmountError::UnmountFailed(
-        "Unmount functionality not yet implemented".to_string()
-    ))
+    tracing::info!("Attempting unmount of: {}", mount_point.display());
+    
+    // Try unmount command
+    let output = std::process::Command::new("umount")
+        .arg(mount_point)
+        .output()
+        .map_err(|e| UnmountError::UnmountFailed(format!("Failed to execute umount: {}", e)))?;
+    
+    if output.status.success() {
+        tracing::info!("Successfully unmounted: {}", mount_point.display());
+        return Ok(());
+    }
+    
+    // Check stderr for specific errors
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    tracing::warn!("Unmount failed: {}", stderr);
+    
+    if stderr.contains("busy") || stderr.contains("in use") {
+        return Err(UnmountError::DeviceBusy(mount_point.display().to_string()));
+    }
+    
+    if stderr.contains("not permitted") || stderr.contains("permission denied") {
+        return Err(UnmountError::PermissionDenied);
+    }
+    
+    Err(UnmountError::UnmountFailed(stderr.to_string()))
 }
 
 /// Check if a mount point is a critical system mount
