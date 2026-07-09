@@ -1,0 +1,25 @@
+{
+  "effortLevel": "medium",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)"
+    ],
+    "deny": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git stash:*)",
+      "Bash(flatpak install:*)",
+      "Bash(flatpak-builder:*)",
+      "Bash(./setup-dev.sh:*)",
+      "Bash(./build-flatpak.sh:*)",
+      "Bash(rm -rf:*)"
+    ]
+  }
+}
