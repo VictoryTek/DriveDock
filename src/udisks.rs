@@ -6,9 +6,10 @@
 //! - `Block.AddConfigurationItem` / `RemoveConfigurationItem` for "permanently dock"
 //!   (fstab) persistence.
 //!
-//! Network shares are handled separately, via GVfs (`crate::network::gvfs`) - see
-//! the Phase 1 spec for why UDisks2's `Filesystem` interface only applies to local
-//! block devices.
+//! Network shares are handled separately: discovery via GVfs
+//! (`crate::network::discover`), mount/unmount/persist via the privileged helper
+//! (`crate::network::mount`) - see the Phase 1 specs for why UDisks2's `Filesystem`
+//! interface only applies to local block devices.
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;

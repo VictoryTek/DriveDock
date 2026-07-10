@@ -95,12 +95,9 @@ impl Window {
         main_box.append(&drives_group);
         main_box.append(&status_widget);
 
-        // Fallback re-mount of persistent network shares (in case the systemd --user
-        // unit hasn't run/isn't enabled) before the first drive listing.
         let drives_group_startup = drives_group.clone();
         let status_startup = status.clone();
         glib::spawn_future_local(async move {
-            dock::shares::remount_persistent_shares().await;
             Self::refresh_drives(&drives_group_startup, &status_startup).await;
         });
 
@@ -473,41 +470,39 @@ impl Window {
         row.add_prefix(&icon);
         row.add_suffix(&Self::kind_badge(&share.protocol));
 
-        // "Permanently dock" toggle - re-mount on login, per §7a (network shares
-        // have no fstab entry; see `dock::shares`).
+        // "Permanently dock" toggle - now a real `/etc/fstab` entry (via the
+        // privileged helper), same guarantee as local drives, instead of the old
+        // GVfs-era re-mount-on-login workaround.
         let permanent_check = gtk::CheckButton::builder()
-            .tooltip_text("Permanently dock (re-mount automatically at login)")
+            .tooltip_text("Permanently dock (mount automatically at boot)")
             .valign(gtk::Align::Center)
-            .active(dock::shares::is_persistent(&share.uri))
             .build();
 
         {
-            let uri = share.uri.clone();
+            let share = share.clone();
             let status = status.clone();
             let check_clone = permanent_check.clone();
 
             permanent_check.connect_toggled(move |check| {
                 let enable = check.is_active();
-                let uri = uri.clone();
+                let share = share.clone();
                 let status = status.clone();
                 let check_clone = check_clone.clone();
                 check.set_sensitive(false);
+                let parent_window = check.root().and_downcast_ref::<gtk::Window>().cloned();
 
                 glib::spawn_future_local(async move {
-                    let result = dock::shares::set_persistent(&uri, enable);
+                    let creds = if enable && share.protocol == "SMB" {
+                        network::collect_credentials(parent_window.as_ref()).await
+                    } else {
+                        None
+                    };
+
+                    let result = network::set_persistent(&share, creds, enable).await;
                     match result {
-                        Ok(()) => {
-                            if enable {
-                                status.set_ok(&format!(
-                                    "\"{uri}\" will re-mount at login. Run `systemctl --user enable --now drivedock-remount.service` ({}) to activate this.",
-                                    dock::shares::systemd_unit_display_path()
-                                ));
-                            } else {
-                                status.set_ok(&format!("\"{uri}\" will no longer re-mount at login."));
-                            }
-                        }
+                        Ok(dock_result) => status.set_ok(&dock_result.message),
                         Err(e) => {
-                            tracing::error!("Failed to update persistent share record: {e}");
+                            tracing::error!("Failed to toggle permanent dock: {e}");
                             status.set_error(&format!("Failed to update permanent dock: {e}"));
                             check_clone.set_active(!enable);
                         }
@@ -527,25 +522,25 @@ impl Window {
                 .build();
             undock_btn.add_css_class("flat");
 
-            let uri = share.uri.clone();
+            let share = share.clone();
             let status = status.clone();
             let group = group.clone();
 
             undock_btn.connect_clicked(move |btn| {
                 btn.set_sensitive(false);
-                let uri = uri.clone();
+                let share = share.clone();
                 let status = status.clone();
                 let group = group.clone();
                 let btn_clone = btn.clone();
 
                 glib::spawn_future_local(async move {
-                    match network::unmount_share(&uri).await {
+                    match network::unmount_share(&share).await {
                         Ok(()) => {
-                            status.set_ok(&format!("Undocked {uri}"));
+                            status.set_ok(&format!("Undocked {}", share.uri));
                             Self::refresh_drives(&group, &status).await;
                         }
                         Err(e) => {
-                            tracing::error!("Failed to undock {uri}: {e}");
+                            tracing::error!("Failed to undock {}: {e}", share.uri);
                             status.set_error(&format!("Failed to undock share: {e}"));
                             btn_clone.set_sensitive(true);
                         }
@@ -562,13 +557,13 @@ impl Window {
                 .build();
             dock_btn.add_css_class("flat");
 
-            let uri = share.uri.clone();
+            let share = share.clone();
             let status = status.clone();
             let group = group.clone();
 
             dock_btn.connect_clicked(move |btn| {
                 btn.set_sensitive(false);
-                let uri = uri.clone();
+                let share = share.clone();
                 let status = status.clone();
                 let group = group.clone();
                 let btn_clone = btn.clone();
@@ -578,13 +573,19 @@ impl Window {
                     .cloned();
 
                 glib::spawn_future_local(async move {
-                    match network::mount_share(&uri, parent_window.as_ref()).await {
+                    let creds = if share.protocol == "SMB" {
+                        network::collect_credentials(parent_window.as_ref()).await
+                    } else {
+                        None
+                    };
+
+                    match network::mount_share(&share, creds).await {
                         Ok(()) => {
-                            status.set_ok(&format!("Docked {uri}"));
+                            status.set_ok(&format!("Docked {}", share.uri));
                             Self::refresh_drives(&group, &status).await;
                         }
                         Err(e) => {
-                            tracing::error!("Failed to dock {uri}: {e}");
+                            tracing::error!("Failed to dock {}: {e}", share.uri);
                             status.set_error(&format!("Failed to dock share: {e}"));
                             btn_clone.set_sensitive(true);
                         }

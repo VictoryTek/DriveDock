@@ -6,6 +6,17 @@ authors = ["DriveDock Contributors"]
 description = "A modern Linux drive and network share manager with GTK4"
 license = "GPL-3.0"
 
+[[bin]]
+name = "drivedock"
+path = "src/main.rs"
+
+# Privileged helper, invoked via `pkexec`, that performs real kernel `cifs`/`nfs`
+# mounts and `/etc/fstab` persistence for network shares. Deliberately has no
+# GTK/gio/glib dependency - see src/bin/drivedock-mount-helper.rs.
+[[bin]]
+name = "drivedock-mount-helper"
+path = "src/bin/drivedock-mount-helper.rs"
+
 [dependencies]
 # GTK4 and libadwaita for modern GNOME UI
 gtk = { version = "0.9", package = "gtk4", features = ["v4_12"] }

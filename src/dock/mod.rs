@@ -1,6 +1,5 @@
 pub mod fstab;
 pub mod nixos;
-pub mod shares;
 
 use std::path::Path;
 

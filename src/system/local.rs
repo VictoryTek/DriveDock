@@ -62,7 +62,7 @@ impl MountedDrive {
 /// `unix-device` identifier), so the UI can offer a "Dock" action on
 /// not-yet-mounted removable media in addition to "Undock" on mounted ones.
 /// Network volumes (which have no `unix-device` identifier) are excluded -
-/// those are handled by `crate::network::gvfs`.
+/// those are handled by `crate::network::discover`/`crate::network::mount`.
 pub async fn list_local_drives() -> Result<Vec<MountedDrive>> {
     tracing::debug!("Listing local drives via gio::VolumeMonitor...");
 
