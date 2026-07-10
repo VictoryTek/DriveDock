@@ -14,6 +14,12 @@ libadwaita = { version = "0.7", package = "libadwaita", features = ["v1_5"] }
 # GLib integration for GTK event loop and async support
 glib = "0.20"
 
+# GIO for volume/mount monitoring and GVfs network share discovery
+gio = "0.20"
+
+# UDisks2 D-Bus client for privileged local mount/unmount and fstab persistence
+udisks2 = "0.3"
+
 # Futures for async operations
 futures = "0.3"
 

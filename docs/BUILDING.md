@@ -1,153 +1,116 @@
 # Building DriveDock
 
-## Prerequisites Note
+DriveDock is packaged and distributed via a [Nix flake](https://nixos.wiki/wiki/Flakes).
+Nix handles fetching and pinning the GTK4/libadwaita/GVfs/UDisks2 toolchain, so no
+manual system package installation is required if you have Nix with flakes enabled.
 
-**Important**: DriveDock requires GTK4 and libadwaita development libraries to compile.
+## Prerequisites
+
+- [Nix](https://nixos.org/download) with flakes enabled (`experimental-features = nix-command flakes`
+  in `nix.conf`, or pass `--extra-experimental-features 'nix-command flakes'`).
+- At runtime (any distro, NixOS or not): a running `gvfsd` session daemon with the
+  `gvfs-smb`/`gvfs-nfs` GIO modules, and the `udisks2` D-Bus service, for network
+  share discovery and local drive mount/unmount to work. On NixOS, the flake's
+  `nixosModules.default` enables both automatically (`services.gvfs.enable` and
+  `services.udisks2.enable`) when `programs.drivedock.enable = true;`. On non-NixOS
+  distros, install your distribution's `gvfs`, `gvfs-smb`, `gvfs-nfs`, and `udisks2`
+  packages (these are typically already present on GNOME desktops).
+
+## Development Workflow
+
+### Option 1: Nix devShell (recommended)
+
+```bash
+nix develop
+cargo build
+cargo run
+```
+
+`nix develop` drops you into a shell with `pkg-config`, GTK4, libadwaita, GVfs,
+`rust-analyzer`, `clippy`, and `rustfmt` available - `cargo build`/`cargo check`/
+`cargo test` work exactly as in any Rust project from there.
+
+### Option 2: Nix package build
+
+```bash
+nix build .#default
+./result/bin/drivedock
+```
+
+### Option 3: Run directly via flake
+
+```bash
+nix run .#default
+```
+
+### Option 4: Native build (system libraries installed manually)
+
+If you'd rather not use Nix, install the GTK4/libadwaita/GVfs/UDisks2 development
+packages for your distribution and build with Cargo directly:
+
+```bash
+cargo build
+cargo run
+```
 
 If you see errors like:
 ```
 The system library `glib-2.0` required by crate `glib-sys` was not found.
-The system library `gobject-2.0` required by crate `gobject-sys` was not found.
 ```
-
-You need to install the GTK4 development packages:
-
-### Installation Instructions
-
-#### Fedora / RHEL / CentOS
-```bash
-sudo dnf install gtk4-devel libadwaita-devel glib2-devel cairo-devel pango-devel gdk-pixbuf2-devel
-```
-
-#### Ubuntu / Debian
-```bash
-sudo apt install libgtk-4-dev libadwaita-1-dev libglib2.0-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev
-```
-
-#### Arch Linux
-```bash
-sudo pacman -S gtk4 libadwaita glib2 cairo pango gdk-pixbuf2
-```
-
-#### openSUSE
-```bash
-sudo zypper install gtk4-devel libadwaita-devel glib2-devel cairo-devel pango-devel gdk-pixbuf-devel
-```
-
-### Alternative: Use Flatpak Builder
-
-If you don't want to install system dependencies, you can build directly as a Flatpak:
-
-```bash
-# Add GNOME runtime (includes all GTK dependencies)
-flatpak install flathub org.gnome.Platform//47 org.gnome.Sdk//47 org.freedesktop.Sdk.Extension.rust-stable
-
-# Build using Flatpak (no system dependencies needed)
-flatpak-builder --user --install --force-clean build-dir org.example.DriveDock.yml
-
-# Run
-flatpak run org.example.DriveDock
-```
-
-This is the **recommended approach** for development as it:
-- Provides a consistent build environment
-- Matches the production deployment
-- Doesn't require installing system-wide development packages
-- Automatically handles all dependencies
-
-## Development Workflow
-
-### Option 1: Native Build (requires system libraries)
-```bash
-cargo build --release
-cargo run
-```
-
-### Option 2: Flatpak Build (recommended)
-```bash
-# Initial setup (one time)
-flatpak install flathub org.gnome.Platform//47 org.gnome.Sdk//47 org.freedesktop.Sdk.Extension.rust-stable
-
-# Build and test (easy way)
-./build-flatpak.sh
-
-# Or manually:
-flatpak-builder --user --install --force-clean build-dir org.example.DriveDock.yml
-flatpak run org.example.DriveDock
-
-# After adding new Rust dependencies:
-# 1. Update Cargo.toml with new dependency
-# 2. Run: cargo build (to update Cargo.lock)
-# 3. Regenerate sources: python3 flatpak-cargo-generator.py Cargo.lock -o cargo-sources.json
-# 4. Rebuild: ./build-flatpak.sh
-```
-
-### Option 3: Container Build
-```bash
-# Use toolbx or distrobox for isolated development
-toolbox create --distro fedora drivedock-dev
-toolbox enter drivedock-dev
-sudo dnf install gtk4-devel libadwaita-devel rust cargo
-cd /path/to/DriveDock
-cargo build
-```
+you're missing the GTK4/GLib development headers - see `nix/package.nix` for the
+exact `buildInputs` list Nix uses, as a reference for equivalent distro packages
+(e.g. `gtk4-devel libadwaita-devel glib2-devel` on Fedora, `libgtk-4-dev
+libadwaita-1-dev libglib2.0-dev` on Debian/Ubuntu).
 
 ## Code Structure
 
-The project follows a clean modular architecture:
+The project follows a clean modular architecture, narrowed to: list local drives +
+network shares, mount ("dock"), unmount ("undock"), and a per-item "permanently dock"
+toggle.
 
 ```
 src/
 ├── main.rs           # Entry point, GTK application setup
 ├── ui/
 │   ├── mod.rs
-│   └── window.rs     # Main window with 3 sections (Local/Network/Status)
+│   └── window.rs     # Main window: Drives section (local + network) + Status section
 ├── system/
 │   ├── mod.rs
-│   ├── local.rs      # Drive enumeration from /proc/mounts
-│   └── unmount.rs    # Safe unmount with validation
-└── network/
-    ├── mod.rs
-    ├── smb.rs        # SMB/CIFS discovery (Avahi + smbclient)
-    └── nfs.rs        # NFS discovery (Avahi + showmount)
+│   ├── local.rs      # Local drive enumeration via gio::VolumeMonitor
+│   └── unmount.rs    # Unmount via UDisks2 (crate::udisks), critical-mount safety checks
+├── network/
+│   ├── mod.rs
+│   └── gvfs.rs        # Network share discovery/mount/unmount via GIO/GVfs
+├── dock/
+│   ├── mod.rs         # OS detection (NixOS vs. other Linux) + permanent-dock orchestration
+│   ├── fstab.rs        # Local drive fstab persistence via UDisks2
+│   ├── nixos.rs        # NixOS `fileSystems` config-snippet guidance text
+│   └── shares.rs        # Network share "permanently dock" (re-mount-on-login) persistence
+└── udisks.rs          # Thin wrapper around the `udisks2` D-Bus client crate
+
+nix/
+├── package.nix        # buildRustPackage derivation
+├── module.nix          # NixOS module (programs.drivedock.enable)
+└── shell.nix            # Dev shell
 ```
 
-All backend functions are async-ready stub implementations with detailed TODO comments explaining the full implementation strategy.
-
-## Next Implementation Steps
-
-1. **Drive Enumeration** (system/local.rs)
-   - Parse /proc/mounts
-   - Use statvfs for size/usage
-   - Filter pseudo-filesystems
-
-2. **SMB Discovery** (network/smb.rs)
-   - D-Bus Avahi integration
-   - smbclient querying
-   - GIO/GVFS integration
-
-3. **NFS Discovery** (network/nfs.rs)
-   - Avahi _nfs._tcp browsing
-   - showmount -e querying
-   - NFSv3/v4 detection
-
-4. **Mount Operations**
-   - UDisks2 D-Bus integration
-   - Polkit authorization
-   - Credential management
-
-5. **UI Improvements**
-   - Dynamic drive list updates
-   - Authentication dialogs
-   - Progress indicators
-   - Error toasts
-
 ## Testing
-
-Currently, the project includes unit tests for utility functions:
 
 ```bash
 cargo test
 ```
 
-Integration tests will be added as functionality is implemented.
+or, inside `nix develop`, the same command works unmodified.
+
+## Persistent network shares
+
+Toggling "Permanently dock" on a network share writes a `~/.config/systemd/user/drivedock-remount.service`
+unit (re-mounting recorded shares at login) but does **not** enable/start it
+automatically - run:
+
+```bash
+systemctl --user enable --now drivedock-remount.service
+```
+
+yourself once you're happy with your persistent-share selection. DriveDock also
+re-mounts recorded shares on its own startup as a fallback.

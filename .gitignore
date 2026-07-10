@@ -3,11 +3,9 @@
 **/*.rs.bk
 *.pdb
 
-# Flatpak build directories
-build-dir/
-.flatpak-builder/
-repo/
-.flatpak/
+# Nix build output symlinks
+result
+result-*
 
 # IDE and editor files
 .vscode/
